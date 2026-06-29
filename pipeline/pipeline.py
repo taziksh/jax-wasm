@@ -9,12 +9,28 @@ data layout.
 """
 
 # Anchored, comma-separated MLIR textual pass pipeline.
+#
+# The last block sets up the call ABI, grounded in eudsl's working
+# test_wasm_execution_engine.py:
+#   * buffer-results-to-out-params turns a function that RETURNS a memref (what
+#     bufferizing JAX's `@main` returning a tensor produces) into one that takes
+#     the output as a trailing memref OUT-PARAM, so the caller pre-allocates it.
+#   * llvm-request-c-wrappers stamps `llvm.emit_c_interface` on every func, so
+#     convert-func-to-llvm emits the `_mlir_ciface_<name>` wrapper that the
+#     WasmExecutionEngine calls with pointer-to-pointer-to-descriptor args.
+# `inline` is first: the StableHLO from JAX keeps small helpers as separate
+# func.func (e.g. the GPT-2 block's `tril`/`_where`), and stablehlo-legalize-to-
+# linalg does NOT inline them. Flattening to a single region first (verified:
+# 1 func, 0 calls on the GPT-2 fixture) avoids cross-function bufferization.
 PIPELINE = (
     "builtin.module("
+    "inline,"
     "func.func(stablehlo-legalize-to-linalg),"
     "one-shot-bufferize{bufferize-function-boundaries},"
+    "buffer-results-to-out-params,"
     "func.func(convert-linalg-to-loops),"
     "convert-scf-to-cf,"
+    "func.func(llvm-request-c-wrappers),"
     "finalize-memref-to-llvm{index-bitwidth=32},"
     "convert-func-to-llvm{index-bitwidth=32},"
     "convert-arith-to-llvm{index-bitwidth=32},"
@@ -22,6 +38,13 @@ PIPELINE = (
     "convert-cf-to-llvm{index-bitwidth=32},"
     "reconcile-unrealized-casts)"
 )
+# Call ABI note (L4/L5): `buffer-results-to-out-params` is intended to turn the
+# returned tensor into a trailing caller-allocated out-param. If it does NOT fire
+# (observed: `@main` still `-> memref<8x64xf32>`), emit_c_interface uses the
+# leading-sret convention instead: _mlir_ciface_main(result_desc*, arg0*, ...),
+# where the function fills `result_desc` with an internally-allocated buffer the
+# caller reads back (and frees). realtime_jit.py documents both; confirm which
+# fires against the real wasm build before wiring numerics.
 
 
 def lower(module, context=None):

@@ -17,7 +17,10 @@ import numpy as np
 
 from .pipeline import PIPELINE, assert_lowered
 
-ENTRY = "entry"  # wasm cannot export a function named "main" (see eudsl engine)
+# Naming the entry `@main` is fine: eudsl's engine only forbids *calling* the raw
+# `main` symbol; the `_mlir_ciface_main` wrapper (emitted via llvm-request-c-wrappers
+# in PIPELINE) is callable. Verified against eudsl test_wasm_execution_engine.py.
+ENTRY = "main"
 
 
 def stablehlo_from_jax(f, *args):
@@ -39,9 +42,6 @@ def _prepare_module(stablehlo_text):
     # upstream RegisterEverything only, allow_unregistered lets parsing proceed.
     ctx.allow_unregistered_dialects = True
 
-    # wasm cannot export `main`; rename the JAX entry before compiling.
-    stablehlo_text = stablehlo_text.replace("@main", f"@{ENTRY}")
-
     module = Module.parse(stablehlo_text, ctx)
     PassManager.parse(PIPELINE, context=ctx).run(module.operation)
     assert_lowered(str(module))   # L3 gate
@@ -56,17 +56,40 @@ def compile_callable(stablehlo_text):
     module = _prepare_module(stablehlo_text)
     engine = WasmExecutionEngine(module)   # emit wasm + wasm-ld + dlopen, in tab
 
-    def invoke(*np_args, out_shape, out_dtype=np.float32):
-        # memref ABI: the lowered function (one-shot-bufferize + func-to-llvm)
-        # takes the destination + sources as memref descriptors. For a clean
-        # pointer-to-descriptor ABI you typically lower with llvm.emit_c_interface
-        # and call `_mlir_ciface_<entry>`. This is the L4/L5 detail the build
-        # discovers; wire the exact descriptor packing to match the chosen ABI.
+    def dptr(a):
+        # eudsl convention (test_wasm_execution_engine.py): each memref arg is
+        # passed as pointer-to-pointer-to-descriptor.
+        return ctypes.pointer(ctypes.pointer(get_ranked_memref_descriptor(a)))
+
+    def invoke(*np_args, out_shape, out_dtype=np.float32, abi="sret"):
+        # ABI grounded in eudsl test_wasm_execution_engine.py + observed lowering.
+        # Two cases depending on whether buffer-results-to-out-params fires:
+        #   abi="out_param": @main takes the output as a trailing memref arg the
+        #       caller allocates -> (inputs..., out).
+        #   abi="sret" (observed default): @main returns a memref, so
+        #       emit_c_interface puts a result descriptor pointer FIRST; the
+        #       function fills it with an internally-allocated buffer that we copy
+        #       back. -> (out, inputs...).
         out = np.zeros(out_shape, out_dtype)
-        descs = [ctypes.pointer(get_ranked_memref_descriptor(out))]
-        descs += [ctypes.pointer(get_ranked_memref_descriptor(a)) for a in np_args]
-        engine.invoke(f"_mlir_ciface_{ENTRY}", *descs)
-        return out
+        if abi == "out_param":
+            engine.invoke(f"_mlir_ciface_{ENTRY}",
+                          *[dptr(a) for a in np_args], dptr(out))
+            return out
+        # sret: pass a result descriptor first; the function fills it. We read the
+        # data back through the descriptor's `aligned` pointer + shape.
+        res_desc = get_ranked_memref_descriptor(out)
+        engine.invoke(f"_mlir_ciface_{ENTRY}",
+                      ctypes.pointer(ctypes.pointer(res_desc)),
+                      *[dptr(a) for a in np_args])
+        n = int(np.prod(out_shape))
+        elem_ptr = ctypes.cast(res_desc.aligned,
+                               ctypes.POINTER(ctypes.c_float * n))
+        result = np.ctypeslib.as_array(elem_ptr.contents).reshape(out_shape).copy()
+        # NOTE: the 32b descriptor struct (offsets of allocated/aligned/offset/
+        # shape/strides) comes from wasm_execution_engine.make_nd_memref_descriptor;
+        # confirm field layout + buffer ownership/free against the real wasm build
+        # at L5 before trusting numerics.
+        return result
 
     return invoke
 

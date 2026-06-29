@@ -28,8 +28,11 @@ NODE="$EMSDK/node/22.16.0_64bit/bin/node"
 [ -x "$NODE" ] || NODE=node
 RUNNER="$RUNNER_BUILD/pipeline_runner.js"
 
-# The verified lowering pipeline (index width pinned to 32 for wasm32).
-PIPELINE='builtin.module(func.func(stablehlo-legalize-to-linalg),one-shot-bufferize{bufferize-function-boundaries},func.func(convert-linalg-to-loops),convert-scf-to-cf,finalize-memref-to-llvm{index-bitwidth=32},convert-func-to-llvm{index-bitwidth=32},convert-arith-to-llvm{index-bitwidth=32},convert-math-to-llvm,convert-cf-to-llvm{index-bitwidth=32},reconcile-unrealized-casts)'
+# The verified lowering pipeline (index width pinned to 32 for wasm32), incl. the
+# call-ABI passes (buffer-results-to-out-params, llvm-request-c-wrappers) so this
+# exercises the exact pipeline the in-tab runtime uses. Keep in sync with
+# pipeline/pipeline.py PIPELINE.
+PIPELINE='builtin.module(inline,func.func(stablehlo-legalize-to-linalg),one-shot-bufferize{bufferize-function-boundaries},buffer-results-to-out-params,func.func(convert-linalg-to-loops),convert-scf-to-cf,func.func(llvm-request-c-wrappers),finalize-memref-to-llvm{index-bitwidth=32},convert-func-to-llvm{index-bitwidth=32},convert-arith-to-llvm{index-bitwidth=32},convert-math-to-llvm,convert-cf-to-llvm{index-bitwidth=32},reconcile-unrealized-casts)'
 
 run_one() {
   local mlir="$1" name="$2"
