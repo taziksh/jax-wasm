@@ -15,6 +15,13 @@ source "$HERE/env.sh"
 source "$EMSDK/emsdk_env.sh" 2>/dev/null || true
 export PATH="$EMSDK/upstream/emscripten:$EMSDK/upstream/bin:$PATH"
 
+# Prereqs discovered building StableHLO against a libraries-only wasm MLIR install:
+#  (a) shim the install so find_package(MLIR) doesn't choke on unbuilt tool
+#      targets and uses native tablegen;
+#  (b) patch the StableHLO source (dummy lit tools + disable cpp/builder).
+"$HERE/../patches/fixup_wasm_mlir_install.sh" "$WASM_LLVM_INSTALL" "$LLVM_NATIVE_TOOL_DIR"
+"$HERE/../patches/patch_stablehlo_source.sh" "$STABLEHLO_SOURCE_DIR"
+
 emcmake cmake -G Ninja \
   -S "$STABLEHLO_SOURCE_DIR" \
   -B "$STABLEHLO_WASM_BUILD" \
