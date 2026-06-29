@@ -65,3 +65,21 @@ target_link_options(pipeline_runner PRIVATE
   # are never reached on the lowering path. Same approach eudsl uses for libm.
   "-sERROR_ON_UNDEFINED_SYMBOLS=0"
 )
+
+# --- numeric_runner: codegen lowered LLVM-dialect MLIR -> wasm object (L4) -----
+# No StableHLO needed (input is already LLVM dialect), so this is a small link.
+add_executable(numeric_runner numeric_runner.cpp)
+llvm_map_components_to_libnames(LLVM_CG_LIBS
+  WebAssembly WebAssemblyCodeGen WebAssemblyDesc WebAssemblyInfo
+  Target CodeGen MC AsmPrinter SelectionDAG Analysis Core Support)
+target_link_libraries(numeric_runner PRIVATE
+  MLIRCAPIRegisterEverything
+  MLIRCAPIIR
+  MLIRTargetLLVMIRExport
+  MLIRLLVMToLLVMIRTranslation
+  MLIRBuiltinToLLVMIRTranslation
+  ${LLVM_CG_LIBS})
+target_link_options(numeric_runner PRIVATE
+  "-sALLOW_TABLE_GROWTH" "-sWASM_BIGINT" "-sASSERTIONS"
+  "-sNO_DISABLE_EXCEPTION_CATCHING" "-sALLOW_MEMORY_GROWTH"
+  "-sNODERAWFS=1" "-sSTACK_SIZE=4MB" "-sERROR_ON_UNDEFINED_SYMBOLS=0")
