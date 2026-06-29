@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+build/
+*.o
+*.wasm
+fixtures/*.regen.stablehlo.mlir
