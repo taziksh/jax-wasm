@@ -31,6 +31,10 @@ PIPELINE = (
     "func.func(convert-linalg-to-loops),"
     "convert-scf-to-cf,"
     "func.func(llvm-request-c-wrappers),"
+    # expand-strided-metadata decomposes memref.subview (the GPT-2 QKV split
+    # produces strided subviews) so finalize-memref-to-llvm can lower them;
+    # without it, 4 unrealized_conversion_casts survived (verified in wasm).
+    "expand-strided-metadata,"
     "finalize-memref-to-llvm{index-bitwidth=32},"
     "convert-func-to-llvm{index-bitwidth=32},"
     "convert-arith-to-llvm{index-bitwidth=32},"

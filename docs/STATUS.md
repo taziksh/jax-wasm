@@ -39,15 +39,27 @@
 - 🔄 **Stage 2** wasm LLVM/MLIR/lld — configured clean (emcmake) and building
   (5212 targets). This is the multi-hour stage; see the run log for where it got.
 
-## Will be discovered (needs the build to finish)
+## DISCOVERED by running the full build this session (L0–L3 PASS in wasm)
 
-- Does StableHLO cross-compile to wasm32 against this LLVM and **link** into the
-  harness/CAPI (stage 3 + L2). No fundamental blocker seen — StableHLO's deps are
-  all upstream dialects already in stage 2.
-- **L3 in wasm** — does the full pipeline string lower the fixtures with 0
-  leftovers when the passes run *inside* wasm (`scripts/05`).
-- **L4/L5 numerics** — the memref-descriptor call ABI (likely needs
-  `llvm.emit_c_interface`); compare to the `.npz` oracles.
+- ✅ **Stage 3 / D** — StableHLO **cross-compiles to wasm32** against this LLVM and
+  **links** into the harness (`pipeline_runner.wasm`, 94 MB). The core unknown is
+  resolved. (Seven integration issues found + fixed along the way; see
+  `build_artifacts/RESULTS.md` and the `patches/` scripts.)
+- ✅ **L2** — `mlirRegisterAllStablehloPasses()` registers in wasm; the pipeline
+  (incl. `stablehlo-legalize-to-linalg`) parses and runs inside the wasm module.
+- ✅ **L3 smoke** — matmul+softmax lowers in wasm: 0 stablehlo/linalg/unrealized,
+  784 llvm ops.
+- ✅ **L3 GPT-2 block** — 0 stablehlo/linalg/memref/unrealized, 3892 llvm ops.
+  Required adding `expand-strided-metadata` (QKV `memref.subview`) — a fix the
+  build surfaced. Lowered IR shows index-bitwidth=32, `llvm.emit_c_interface`,
+  leading-sret result descriptor.
+
+## Still to do (not yet run here)
+
+- **L4/L5 numerics** — codegen the lowered LLVM → wasm object → wasm-ld → dlopen →
+  call via the eudsl WasmExecutionEngine, and compare to the `.npz` oracles. The
+  lowering output is ABI-ready; numerics were validated natively (IREE-CPU vs JAX
+  ~1e-6) but not yet through the wasm-emitted kernel.
 - **Performance** — first version is correct-but-slow (no SIMD). `-msimd128` and
   kernel work come later. Keep shapes static (dynamic shapes reintroduce the i64
   hazards audited out here).
