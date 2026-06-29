@@ -23,7 +23,9 @@ emcmake cmake -G Ninja \
   -DMLIR_DIR="$WASM_LLVM_INSTALL/lib/cmake/mlir" \
   -DLLVM_DIR="$WASM_LLVM_INSTALL/lib/cmake/llvm" \
   -DSTABLEHLO_ENABLE_BINDINGS_PYTHON=OFF \
-  -DSTABLEHLO_BUILD_EMBEDDED=ON \
+  -DSTABLEHLO_BUILD_EMBEDDED=OFF \
+  `# EMBEDDED=OFF + stablehlo as top-level source => STABLEHLO_STANDALONE_BUILD,` \
+  `# which calls find_package(MLIR REQUIRED CONFIG) using MLIR_DIR above.` \
   -DLLVM_ENABLE_THREADS=OFF \
   -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_PIC=ON \
   -DLLVM_TARGETS_TO_BUILD=WebAssembly \
@@ -39,7 +41,7 @@ emcmake cmake -G Ninja \
   -DCMAKE_MODULE_LINKER_FLAGS="$EM_LINK_FLAGS"
 
 ninja -C "$STABLEHLO_WASM_BUILD" \
-  StablehloOps ChloOps StablehloLinalgTransforms StablehloCAPI
+  StablehloOps ChloOps StablehloLinalgTransforms StablehloCAPI ChloCAPI
 
 echo "[stage3] StableHLO wasm static libs:"
 find "$STABLEHLO_WASM_BUILD" -name 'libStablehlo*.a' -o -name 'libChlo*.a' 2>/dev/null | head

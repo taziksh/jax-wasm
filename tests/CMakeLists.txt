@@ -30,13 +30,18 @@ include_directories(
 add_executable(pipeline_runner pipeline_runner.c)
 
 # StableHLO static libs (order matters for static linking: these before MLIR).
+# pipeline_runner.c uses mlirRegisterAllStablehloPasses + mlirGetDialectHandle__
+# stablehlo__ (both in StablehloCAPI) AND mlirGetDialectHandle__chlo__ (in the
+# SEPARATE ChloCAPI — verified in stablehlo/integrations/c/CMakeLists.txt).
 find_library(LIB_SHLO_CAPI   NAMES StablehloCAPI             PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
+find_library(LIB_CHLO_CAPI   NAMES ChloCAPI                  PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
 find_library(LIB_SHLO_LINALG NAMES StablehloLinalgTransforms PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
 find_library(LIB_SHLO_OPS    NAMES StablehloOps              PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
 find_library(LIB_CHLO_OPS    NAMES ChloOps                   PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
 
 target_link_libraries(pipeline_runner PRIVATE
   ${LIB_SHLO_CAPI}
+  ${LIB_CHLO_CAPI}
   ${LIB_SHLO_LINALG}
   ${LIB_SHLO_OPS}
   ${LIB_CHLO_OPS}
