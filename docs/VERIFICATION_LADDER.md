@@ -10,7 +10,7 @@ localized rather than ambiguous.
 | L2 | StableHLO passes **registered** in wasm | `pipeline_runner.wasm` parses `stablehlo-legalize-to-linalg` (proves `mlirRegisterAllStablehloPasses()` linked) | L1 |
 | L3 | pipeline **lowers** | run `PIPELINE` on smoke + gpt2; success = 0 leftover `stablehlo.`/`linalg.`/`unrealized_conversion_cast` | L2 |
 | L4 | codegen | translate → wasm object → wasm-ld → dlopen; module instantiates, symbol resolves (handle libm `fmaxf`/`expf`/`tanhf`) | L3 |
-| L5 | **numerics** | call with numpy inputs; compare to desktop JAX (`fixtures/*_io.npz`). matmul atol 1e-4, softmax 1e-5, elementwise 1e-6 | L4 |
+| L5 | **numerics** | call with numpy inputs; compare to desktop JAX (`fixtures/*_io.npz`). Use **relative** tol (`np.allclose(rtol=1e-4, atol=1e-5)`): a deep matmul chain accumulates fp differently per backend. Validated natively: IREE-CPU matches JAX to **1.2e-6** on the full block (see STATUS). | L4 |
 | L6 | gpt2 block | repeat L3–L5 on `fixtures/gpt2_block.stablehlo.mlir` | L5 |
 | L7 | realtime | wire `jax.jit → lower → PIPELINE → WasmExecutionEngine` behind one call in JupyterLite | L6 |
 

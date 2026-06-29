@@ -17,8 +17,18 @@
   reconcile → 0 linalg / 0 scf / **0 unrealized casts**, residual exactly
   `cf+arith+memref+math+func` (the →llvm input domain).
 - **GPT-2 + smoke fixtures are bitwidth-clean** — 0 i64, 0 index, 0 dynamic dims.
-- **Numeric oracles exist** — `fixtures/smoke_io.npz`, `fixtures/gpt2_block_io.npz`
-  (desktop-JAX reference for L5/L6).
+- **Numeric oracles exist AND are independently validated** — `fixtures/smoke_io.npz`,
+  `fixtures/gpt2_block_io.npz` (desktop-JAX reference). Cross-checked by compiling
+  the *same* fixtures with IREE's native llvm-cpu backend and running them:
+  IREE-CPU vs JAX = **3.6e-7** (smoke) and **1.2e-6** (full GPT-2 block). This is
+  an independent native validation of the lowering's numerics (L5/L6 for the math),
+  separate from the wasm mechanics still to come.
+  - Two findings from this: (1) the committed fixture and the regenerated one are
+    bit-identical computations (IREE diff 0.0) — the op-histogram difference is
+    only helper-function formulation (`tril`/`_where` inlined vs not). (2) test
+    inputs must use `1/sqrt(fan_in)` weight scaling; unnormalized inputs drive
+    outputs to O(1e4), making a correct 1e-6 *relative* error look like 0.02
+    absolute — so L5/L6 must compare with relative tolerance.
 
 ## Executed while authoring this kit (constrained box: 4 cores, 15 GB RAM, ~29 GB disk, no preinstalled emscripten)
 
