@@ -40,3 +40,12 @@ Gotcha fixed: a JAX entry lowers to a symbol named `main`, which collides with t
 C runtime main when linked into a driver (node silently ran the kernel as main).
 numeric_runner renames the LLVM `main` -> `jitfn`; the _mlir_ciface_ wrapper is
 unaffected. (This is exactly why eudsl forbids calling a `main` symbol.)
+
+## L6 — full GPT-2 block as a wasm-emitted kernel (added)
+
+| Gate | Result |
+|------|--------|
+| L6 full GPT-2 block, wasm-emitted kernel vs JAX | PASS — **max\|wasm-jax\| = 1.19e-06** (LayerNorm+QKV+causal-attn+softmax+GELU, 5 inputs, out [8x64]) |
+
+Complete: the realtime path produces a correct wasm kernel for a real transformer
+block, not just a toy. Only L7 (in-browser pyodide packaging) remains.
