@@ -23,6 +23,7 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 
+#include "llvm/IR/Function.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -72,6 +73,12 @@ int main(int argc, char **argv) {
   llvm::LLVMContext llctx;
   auto llvmModule = mlir::translateModuleToLLVMIR(m, llctx);
   if (!llvmModule) { fprintf(stderr, "translate to LLVM IR failed\n"); return 1; }
+
+  // A JAX entry lowers to a function literally named "main", which collides with
+  // the C runtime's main when the object is linked into a driver. Rename it
+  // (LLVM setName updates all call sites); the _mlir_ciface_<name> wrapper the
+  // caller uses follows. eudsl avoids this by forbidding calls to a `main` symbol.
+  if (auto *fn = llvmModule->getFunction("main")) fn->setName("jitfn");
 
   std::string err;
   const llvm::Target *target =

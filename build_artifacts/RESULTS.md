@@ -24,3 +24,19 @@ Integration issues discovered + fixed to get here (none were in the handoff):
 5. mlirRegisterAllStablehloPasses needs the full pass/Vhlo/Version lib closure -> link all + Version
 6. wait4 host libc symbol from LLVM support -> -sERROR_ON_UNDEFINED_SYMBOLS=0
 7. GPT-2 QKV memref.subview left 4 unrealized casts -> add expand-strided-metadata
+
+## L4/L5 — wasm-emitted kernel computes correct numbers (added)
+
+| Gate | Result |
+|------|--------|
+| L4 codegen lowered MLIR -> wasm object IN wasm | PASS — `numeric_runner.wasm` (in-wasm LLVM WebAssembly backend) emits `kernel.o` ("WebAssembly binary module") from the lowered smoke IR |
+| L5 numerics of the wasm-emitted kernel vs JAX | PASS — softmax(x@w): **max\|wasm-jax\| = 3.58e-07**, row sums = 1.0 |
+
+End-to-end proven: JAX -> StableHLO -> (lowered to LLVM in wasm) -> (wasm object
+emitted by the wasm-compiled LLVM backend) -> executed in node -> result equals
+desktop JAX to fp32 precision. The wasm-emitting JIT produces a correct kernel.
+
+Gotcha fixed: a JAX entry lowers to a symbol named `main`, which collides with the
+C runtime main when linked into a driver (node silently ran the kernel as main).
+numeric_runner renames the LLVM `main` -> `jitfn`; the _mlir_ciface_ wrapper is
+unaffected. (This is exactly why eudsl forbids calling a `main` symbol.)
