@@ -47,8 +47,11 @@ emcmake cmake -G Ninja \
   -DCMAKE_SHARED_LINKER_FLAGS="$EM_LINK_FLAGS" \
   -DCMAKE_MODULE_LINKER_FLAGS="$EM_LINK_FLAGS"
 
+# Building the CAPI targets pulls most StableHLO libs transitively (incl. the
+# pass + reference + vhlo libs). `Version` (target literally named "Version",
+# lib libVersion.a, vhlo::Version) is the one link dep not pulled — build it too.
 ninja -C "$STABLEHLO_WASM_BUILD" \
-  StablehloOps ChloOps StablehloLinalgTransforms StablehloCAPI ChloCAPI
+  StablehloOps ChloOps StablehloLinalgTransforms StablehloCAPI ChloCAPI Version
 
 echo "[stage3] StableHLO wasm static libs:"
 find "$STABLEHLO_WASM_BUILD" -name 'libStablehlo*.a' -o -name 'libChlo*.a' 2>/dev/null | head

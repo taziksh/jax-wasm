@@ -29,22 +29,26 @@ include_directories(
 
 add_executable(pipeline_runner pipeline_runner.c)
 
-# StableHLO static libs (order matters for static linking: these before MLIR).
-# pipeline_runner.c uses mlirRegisterAllStablehloPasses + mlirGetDialectHandle__
-# stablehlo__ (both in StablehloCAPI) AND mlirGetDialectHandle__chlo__ (in the
-# SEPARATE ChloCAPI — verified in stablehlo/integrations/c/CMakeLists.txt).
-find_library(LIB_SHLO_CAPI   NAMES StablehloCAPI             PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
-find_library(LIB_CHLO_CAPI   NAMES ChloCAPI                  PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
-find_library(LIB_SHLO_LINALG NAMES StablehloLinalgTransforms PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
-find_library(LIB_SHLO_OPS    NAMES StablehloOps              PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
-find_library(LIB_CHLO_OPS    NAMES ChloOps                   PATHS ${STABLEHLO_BUILD_DIR} PATH_SUFFIXES lib REQUIRED NO_DEFAULT_PATH)
-
+# StableHLO static libs by DIRECT path. (find_library is unreliable here: the
+# emscripten toolchain sets CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY, so it ignores
+# absolute PATHS outside the sysroot.) Order matters for static linking: these
+# before MLIR. pipeline_runner.c uses mlirRegisterAllStablehloPasses +
+# mlirGetDialectHandle__stablehlo__ (StablehloCAPI) AND mlirGetDialectHandle__
+# chlo__ (the SEPARATE ChloCAPI — see stablehlo/integrations/c/CMakeLists.txt).
+set(SHLO_LIB "${STABLEHLO_BUILD_DIR}/lib")
+# mlirRegisterAllStablehloPasses() pulls the full pass set, and StablehloCAPI
+# embeds the interpreter dialect, so link ALL StableHLO/Chlo/Vhlo archives. lld
+# (wasm-ld) resolves archives iteratively, so order/over-inclusion is fine; it
+# only pulls referenced objects. StablehloCAPI first so its registrations win.
+file(GLOB SHLO_ALL_LIBS
+  "${SHLO_LIB}/libStablehloCAPI.a"
+  "${SHLO_LIB}/libChloCAPI.a"
+  "${SHLO_LIB}/libStablehlo*.a"
+  "${SHLO_LIB}/libChlo*.a"
+  "${SHLO_LIB}/libVhlo*.a"
+  "${SHLO_LIB}/libVersion.a")   # vhlo::Version (separate target named "Version")
 target_link_libraries(pipeline_runner PRIVATE
-  ${LIB_SHLO_CAPI}
-  ${LIB_CHLO_CAPI}
-  ${LIB_SHLO_LINALG}
-  ${LIB_SHLO_OPS}
-  ${LIB_CHLO_OPS}
+  ${SHLO_ALL_LIBS}
   # Upstream MLIR C-API: registration + IR + pass management. find_package(MLIR)
   # pulls the transitive LLVM/MLIR static-lib closure through these targets.
   MLIRCAPIRegisterEverything
@@ -57,4 +61,7 @@ target_link_options(pipeline_runner PRIVATE
   "-sALLOW_TABLE_GROWTH" "-sWASM_BIGINT" "-sASSERTIONS"
   "-sNO_DISABLE_EXCEPTION_CATCHING" "-sALLOW_MEMORY_GROWTH"
   "-sNODERAWFS=1" "-sSTACK_SIZE=4MB"
+  # Tolerate host-only libc symbols pulled from LLVM support (e.g. wait4) that
+  # are never reached on the lowering path. Same approach eudsl uses for libm.
+  "-sERROR_ON_UNDEFINED_SYMBOLS=0"
 )
